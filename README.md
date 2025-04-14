@@ -9,3 +9,9 @@
 1. 下载main.js文件添加到tampermonkey插件中
 
 2. 使用`tampermonkey`浏览器插件 （推荐）：[`油猴脚本下载地址`](https://greasyfork.org/zh-CN/scripts/532804-hlib%E5%9B%BE%E4%B9%A6%E9%A6%86%E4%B8%8B%E8%BD%BD)
+
+
+# `使用`
+
+
+1.进入到小说第一章，第一页的页面点击右下下载按钮
