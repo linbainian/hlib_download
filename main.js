@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         hlib图书馆下载
 // @namespace    http://tampermonkey.net/
-// @version      1.0
+// @version      1.1
 // @license      MIT
 // @description  自动下载小说网站的所有章节内容
 // @author       liepainian
@@ -12,6 +12,8 @@
 // @grant        GM_getValue
 // @grant        GM_addStyle
 // @connect      hlib.cc
+// @downloadURL https://update.greasyfork.org/scripts/532804/hlib%E5%9B%BE%E4%B9%A6%E9%A6%86%E4%B8%8B%E8%BD%BD.user.js
+// @updateURL https://update.greasyfork.org/scripts/532804/hlib%E5%9B%BE%E4%B9%A6%E9%A6%86%E4%B8%8B%E8%BD%BD.meta.js
 // ==/UserScript==
 
 (function () {
@@ -40,18 +42,14 @@
   // 获取当前章节信息
   function getChapterInfo() {
     try {
-      // 获取系列章节链接
       const seriesLinks = [...document.querySelectorAll("#s-pages a")].map((a) => new URL(a.href).pathname);
-
-      // 获取当前章节信息
       const currentChapter = {
         title: document.title.replace(/- \d+$/, "").trim(),
         author: document.querySelector('.list-group-item a[href^="/u/"] span')?.textContent?.trim() || "未知作者",
-        series: [...new Set(seriesLinks)], // 去重
+        series: [...new Set(seriesLinks)],
         currentUrl: window.location.pathname,
       };
 
-      // 如果当前页面不在系列列表中则添加
       if (!currentChapter.series.includes(currentChapter.currentUrl)) {
         currentChapter.series.unshift(currentChapter.currentUrl);
       }
@@ -63,37 +61,54 @@
     }
   }
 
-  // 获取单页内容
+  // 获取单页内容（修改核心）
   async function fetchPageContent(url, page = 1) {
     const pageUrl = page > 1 ? `${url}?p=${page}` : url;
+    let retryCount = 0;
 
-    return new Promise((resolve) => {
-      GM_xmlhttpRequest({
-        method: "GET",
-        url: `https://hlib.cc${pageUrl}`,
-        onload: function (response) {
-          try {
-            const parser = new DOMParser();
-            const doc = parser.parseFromString(response.responseText, "text/html");
+    while (retryCount < 3) {
+      try {
+        const { content, totalPages } = await new Promise((resolve) => {
+          GM_xmlhttpRequest({
+            method: "GET",
+            url: `https://hlib.cc${pageUrl}`,
+            onload: function (response) {
+              const parser = new DOMParser();
+              const doc = parser.parseFromString(response.responseText, "text/html");
 
-            // 解析分页信息
-            const pageSelect = doc.querySelector("select.form-select");
-            const totalPages = pageSelect ? Math.max(...[...pageSelect.options].map((o) => parseInt(o.value))) : 1;
+              // 改进的分页判断逻辑
+              const pageSelect = doc.querySelector("select.form-select");
+              const urlParams = new URLSearchParams(response.finalUrl.split("?")[1]);
+              const currentPage = urlParams.get("p") || 1;
 
-            // 解析正文内容
-            const content = doc.getElementById("content")?.innerText || "内容解析失败，请检查选择器";
+              let totalPages = pageSelect ? Math.max(...[...pageSelect.options].map((o) => parseInt(o.value))) : parseInt(currentPage);
 
-            resolve({ content, totalPages });
-          } catch (e) {
-            resolve({ content: `获取页面失败: ${e.message}`, totalPages: 1 });
-          }
-        },
-        onerror: () => resolve({ content: "请求失败，请检查网络", totalPages: 1 }),
-      });
-    });
+              // 增强内容选择器
+              const contentElement = doc.getElementById("content") || doc.querySelector(".article-content") || doc.querySelector("pre");
+              const content = contentElement?.innerText || "内容解析失败，请检查选择器";
+
+              resolve({ content, totalPages });
+            },
+            onerror: () => resolve({ content: "请求失败，请检查网络", totalPages: 1 }),
+          });
+        });
+
+        // 内容有效性检查
+        if (!content.includes("失败") && content.length > 100) {
+          return { content, totalPages };
+        }
+
+        retryCount++;
+        await new Promise((r) => setTimeout(r, 2000));
+      } catch (e) {
+        retryCount++;
+        await new Promise((r) => setTimeout(r, 2000));
+      }
+    }
+    return { content: "内容获取失败（超过重试次数）", totalPages: 1 };
   }
 
-  // 下载整个章节
+  // 下载整个章节（新增重试机制）
   async function downloadChapter(url) {
     let fullContent = "";
     let currentPage = 1;
@@ -104,15 +119,14 @@
       fullContent += `\n第 ${currentPage} 页\n${content}\n\n`;
       totalPages = tp;
 
-      // 更新按钮进度
       const btn = document.getElementById("tm-download");
       if (btn) {
         btn.innerHTML = `📥 下载中 (${currentPage}/${totalPages})`;
       }
 
       currentPage++;
-      await new Promise((r) => setTimeout(r, 800)); // 降低请求频率
-    } while (currentPage <= totalPages);
+      await new Promise((r) => setTimeout(r, 2500));
+    } while (currentPage <= totalPages && !fullContent.includes("失败"));
 
     return fullContent;
   }
@@ -133,7 +147,6 @@
         fullText += `\n\n第 ${index + 1} 章\n${chapterContent}`;
       }
 
-      // 生成下载文件
       const blob = new Blob([fullText], { type: "text/plain;charset=utf-8" });
       const filename = `${info.title} - ${info.author}.txt`;
 
@@ -143,7 +156,6 @@
         saveAs: true,
       });
 
-      // 恢复按钮状态
       const btn = document.getElementById("tm-download");
       if (btn) {
         btn.innerHTML = "✅ 下载完成";
@@ -151,7 +163,6 @@
       }
     } catch (error) {
       console.error("下载失败:", error);
-      alert(`下载失败: ${error.message}`);
       const btn = document.getElementById("tm-download");
       if (btn) btn.innerHTML = "❌ 下载失败";
     }
