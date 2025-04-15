@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         hlib图书馆下载
 // @namespace    http://tampermonkey.net/
-// @version      1.1
+// @version      1.2
 // @license      MIT
 // @description  自动下载小说网站的所有章节内容
 // @author       liepainian
