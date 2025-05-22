@@ -1,6 +1,6 @@
 # hlib_download
 
-### 这个是一个[`H图书馆`](https://hlib.cc)的小说下载器
+### 这个是一个[`图书馆`](https://hlib.cc)的小说下载器
 
 
 # `下载 & 安装`
